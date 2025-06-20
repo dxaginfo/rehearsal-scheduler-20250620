@@ -1,0 +1,215 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   String                 @id @default(uuid())
+  email                String                 @unique
+  hashedPassword       String
+  firstName            String?
+  lastName             String?
+  phoneNumber          String?
+  profilePictureUrl    String?
+  timeZone             String                 @default("UTC")
+  notificationPrefs    Json                   @default("{}")
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+  lastLogin            DateTime?
+  bandMembers          BandMember[]
+  availabilityPatterns AvailabilityPattern[]
+  availabilityExceptions AvailabilityException[]
+  rehearsalAttendance  RehearsalAttendance[]
+  rehearsalsCreated    Rehearsal[]
+  setlistsCreated      Setlist[]
+  rehearsalNotes       RehearsalNote[]
+  calendarIntegrations CalendarIntegration[]
+  notifications        Notification[]
+}
+
+model Band {
+  id                String               @id @default(uuid())
+  name              String
+  description       String?
+  logoUrl           String?
+  createdById       String
+  createdBy         User                 @relation(fields: [createdById], references: [id])
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  members           BandMember[]
+  rehearsals        Rehearsal[]
+  venues            RehearsalVenue[]
+  setlists          Setlist[]
+  songs             Song[]
+}
+
+model BandMember {
+  id          String    @id @default(uuid())
+  bandId      String
+  userId      String
+  role        String    // admin, member
+  instrument  String?
+  joinDate    DateTime  @default(now())
+  status      String    // active, inactive, invited
+  band        Band      @relation(fields: [bandId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@unique([bandId, userId])
+}
+
+model AvailabilityPattern {
+  id             String   @id @default(uuid())
+  userId         String
+  dayOfWeek      Int      // 0-6 (Sunday to Saturday)
+  startTime      DateTime
+  endTime        DateTime
+  isAvailable    Boolean
+  recurrenceRule String?  // iCalendar RRULE format
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  user           User     @relation(fields: [userId], references: [id])
+}
+
+model AvailabilityException {
+  id          String   @id @default(uuid())
+  userId      String
+  date        DateTime
+  startTime   DateTime
+  endTime     DateTime
+  isAvailable Boolean
+  reason      String?
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model RehearsalVenue {
+  id          String     @id @default(uuid())
+  bandId      String
+  name        String
+  address     String?
+  coordinates Json?      // GeoJSON Point
+  notes       String?
+  contactInfo String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  band        Band       @relation(fields: [bandId], references: [id])
+  rehearsals  Rehearsal[]
+}
+
+model Rehearsal {
+  id          String               @id @default(uuid())
+  bandId      String
+  venueId     String?
+  title       String
+  startDatetime DateTime
+  endDatetime DateTime
+  description String?
+  status      String               // scheduled, cancelled, completed
+  createdById String
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  band        Band                 @relation(fields: [bandId], references: [id])
+  venue       RehearsalVenue?      @relation(fields: [venueId], references: [id])
+  createdBy   User                 @relation(fields: [createdById], references: [id])
+  attendances RehearsalAttendance[]
+  setlists    Setlist[]
+  notes       RehearsalNote[]
+}
+
+model RehearsalAttendance {
+  id          String    @id @default(uuid())
+  rehearsalId String
+  userId      String
+  status      String    // confirmed, declined, tentative, attended, absent
+  reason      String?
+  updatedAt   DateTime  @updatedAt
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@unique([rehearsalId, userId])
+}
+
+model Setlist {
+  id          String        @id @default(uuid())
+  bandId      String
+  rehearsalId String?
+  name        String
+  description String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  band        Band          @relation(fields: [bandId], references: [id])
+  rehearsal   Rehearsal?    @relation(fields: [rehearsalId], references: [id])
+  createdBy   User          @relation(fields: [createdById], references: [id])
+  items       SetlistItem[]
+}
+
+model SetlistItem {
+  id              String  @id @default(uuid())
+  setlistId       String
+  songId          String
+  position        Int
+  notes           String?
+  durationMinutes Int?
+  setlist         Setlist @relation(fields: [setlistId], references: [id])
+  song            Song    @relation(fields: [songId], references: [id])
+}
+
+model Song {
+  id              String        @id @default(uuid())
+  bandId          String
+  title           String
+  artist          String?
+  durationMinutes Int?
+  key             String?
+  tempo           Int?
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  band            Band          @relation(fields: [bandId], references: [id])
+  setlistItems    SetlistItem[]
+}
+
+model RehearsalNote {
+  id          String    @id @default(uuid())
+  rehearsalId String
+  userId      String
+  note        String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  rehearsal   Rehearsal @relation(fields: [rehearsalId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+model CalendarIntegration {
+  id            String   @id @default(uuid())
+  userId        String
+  provider      String   // google, apple, outlook
+  accessToken   String
+  refreshToken  String?
+  tokenExpiresAt DateTime?
+  calendarId    String?
+  syncEnabled   Boolean  @default(true)
+  lastSync      DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // rehearsal_created, rehearsal_updated, etc.
+  content   String
+  isRead    Boolean  @default(false)
+  relatedId String?  // polymorphic reference
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+}
